@@ -11,6 +11,32 @@ struct Round {
     theirs: Move,
     ours: Move,
 }
+struct Strategy {
+    theirs: Move,
+    expected: Outcome,
+}
+impl From<Strategy> for Round {
+    fn from(s: Strategy) -> Self {
+        let move_to_play: Move;
+        match s.expected {
+            Outcome::Draw => move_to_play = s.theirs,
+            Outcome::Win => match s.theirs {
+                Move::Paper => move_to_play = Move::Scissors,
+                Move::Rock => move_to_play = Move::Paper,
+                Move::Scissors => move_to_play = Move::Rock,
+            },
+            Outcome::Loss => match s.theirs {
+                Move::Paper => move_to_play = Move::Rock,
+                Move::Rock => move_to_play = Move::Scissors,
+                Move::Scissors => move_to_play = Move::Paper,
+            },
+        }
+        Round {
+            theirs: s.theirs,
+            ours: move_to_play,
+        }
+    }
+}
 impl TryFrom<char> for Move {
     type Error = color_eyre::Report;
 
@@ -21,6 +47,31 @@ impl TryFrom<char> for Move {
             'C' | 'Z' => Ok(Move::Scissors),
             _ => Err(color_eyre::eyre::eyre!("Not a valid move {c:?}!")),
         }
+    }
+}
+impl TryFrom<char> for Outcome {
+    type Error = color_eyre::Report;
+
+    fn try_from(c: char) -> Result<Self, Self::Error> {
+        match c {
+            'X' => Ok(Outcome::Loss),
+            'Y' => Ok(Outcome::Draw),
+            'Z' => Ok(Outcome::Win),
+            _ => Err(color_eyre::eyre::eyre!("Not a valid outcome {c:?}!")),
+        }
+    }
+}
+impl FromStr for Strategy {
+    type Err = color_eyre::Report;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut chars = s.chars();
+        let (Some(theirs), Some(' '), Some(expected), None) = (chars.next(), chars.next(), chars.next(), chars.next()) else{
+            return Err(color_eyre::eyre::eyre!("Expected <theirs>SP<outcome>EOF, got {s:?}"));
+        };
+        Ok(Self {
+            theirs: theirs.try_into()?,
+            expected: expected.try_into()?,
+        })
     }
 }
 impl FromStr for Round {
@@ -36,6 +87,7 @@ impl FromStr for Round {
         })
     }
 }
+
 enum Outcome {
     Win,
     Draw,
@@ -80,14 +132,11 @@ impl Round {
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
-    for round in include_str!("input.txt").lines().map(|line| line.parse::<Round>()) {
-        let round = round?;
-        println!("{round:?}, point: {}", round.point());
-    }
     let result = include_str!("input.txt")
         .lines()
-        .map(|line| line.parse::<Round>())
-        .map(|round| round.unwrap().point())
+        .map(|line| line.parse::<Strategy>())
+        .map(|strategy| strategy.unwrap())
+        .map(|strategy| Round::from(strategy).point())
         .sum::<u64>();
     println!("result: {result}");
     Ok(())
