@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use color_eyre;
+use itertools::Itertools;
 mod item {
     #[repr(transparent)]
-    #[derive(PartialEq, Eq, Clone, Copy)]
+    #[derive(PartialEq, Eq, Clone, Copy, Hash)]
     pub(crate) struct Item(u8);
     impl TryFrom<u8> for Item {
         type Error = color_eyre::Report;
@@ -31,28 +34,22 @@ mod item {
 use item::Item;
 
 fn main() -> color_eyre::Result<()> {
-    let mut priority_sum = 0;
-    for line in include_str!("input.txt").lines() {
-        let (first, second) = line.split_at(line.len() / 2);
-        let first_items = first
-            .bytes()
-            .map(|b| Item::try_from(b).unwrap())
-            .collect::<Vec<_>>();
-        let priority = second
-            .bytes()
+    let rucksacks = include_str!("input.txt").lines().map(|line| {
+        line.bytes()
             .map(Item::try_from)
-            .find_map(|item| {
-                item.ok().and_then(|item| {
-                    first_items
-                        .iter()
-                        .copied()
-                        .find(|&first_item| first_item == item)
-                })
+            .collect::<Result<HashSet<_>, _>>()
+    });
+    let sum = itertools::process_results(rucksacks, |rs| {
+        rs.tuples()
+            .map(|(a, b, c)| {
+                a.iter()
+                    .copied()
+                    .find(|i| b.contains(i) && c.contains(i))
+                    .map(|i| dbg!(i.score()))
+                    .unwrap_or_default()
             })
-            .expect("There should be exactly one duplicate")
-            .score();
-        priority_sum += priority;
-    }
-    println!("Total priority is {priority_sum}");
+            .sum::<usize>()
+    })?;
+    dbg!(sum);
     Ok(())
 }
