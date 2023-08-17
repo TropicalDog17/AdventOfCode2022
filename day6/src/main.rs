@@ -1,7 +1,9 @@
+use std::collections::HashSet;
+
 use itertools::Itertools;
 fn find_position_marker(input: &str) -> Option<usize>{
     
-    input.chars().tuple_windows().position(|(a,b,c,d)| a != b && b != c && c!= d && a != c && a != d && b != d ).map(|pos| pos+4)
+    input.as_bytes().windows(4).position(|window| window.iter().collect::<HashSet<_>>().len() == 4).map(|pos| pos+4)
 }
 fn main() {
     let line = include_str!("input.txt");
