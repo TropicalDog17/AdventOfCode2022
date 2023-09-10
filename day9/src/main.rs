@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::collections::HashSet;
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 
 enum Direction {
     Left,
@@ -11,6 +11,7 @@ enum Direction {
     UpRight,
     DownLeft,
     DownRight,
+    StandStill,
 }
 #[derive(Default, PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct Position {
@@ -22,6 +23,26 @@ impl Position {
         Self { row, col }
     }
 }
+struct LongerRope {
+    segments: Vec<Rope>,
+    visited: Vec<Position>,
+}
+impl LongerRope {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn default() -> Self {
+        let mut segments = Vec::new();
+        for _ in 0..9 {
+            segments.push(Rope::default());
+        }
+        Self {
+            segments,
+            visited: vec![Position::default()],
+        }
+    }
+}
+#[derive(Default, Clone, Debug)]
 struct Rope {
     head: Position,
     tail: Position,
@@ -54,19 +75,39 @@ impl Rope {
         let row_diff = self.head.row - self.tail.row;
         col_diff == 0 && row_diff == 0
     }
-    pub fn is_touching_diagonal(&self) -> bool {
-        self.is_touching() && !self.is_same_row_or_col()
-    }
-    pub fn is_touching_adjacent(&self) -> bool {
-        self.is_touching() && self.is_same_row_or_col()
-    }
+    // pub fn is_touching_diagonal(&self) -> bool {
+    //     self.is_touching() && !self.is_same_row_or_col()
+    // }
+    // pub fn is_touching_adjacent(&self) -> bool {
+    //     self.is_touching() && self.is_same_row_or_col()
+    // }
     pub fn move_head(&mut self, direction: &Direction) {
         match direction {
             Direction::Down => self.head.row -= 1,
             Direction::Up => self.head.row += 1,
             Direction::Left => self.head.col -= 1,
             Direction::Right => self.head.col += 1,
-            _ => unimplemented!(),
+            Direction::DownLeft => {
+                self.head.row -= 1;
+                self.head.col -= 1;
+            }
+            Direction::DownRight => {
+                self.head.row -= 1;
+                self.head.col += 1;
+            }
+            Direction::UpRight => {
+                self.head.row += 1;
+                self.head.col += 1;
+            }
+            Direction::UpLeft => {
+                self.head.row += 1;
+                self.head.col -= 1;
+            }
+            // Stand still
+            Direction::StandStill => {
+                self.head.row += 0;
+                self.head.col += 0;
+            }
         }
     }
     pub fn move_tail(&mut self, direction: &Direction) {
@@ -91,56 +132,81 @@ impl Rope {
                 self.tail.row += 1;
                 self.tail.col -= 1;
             }
+            _ => {
+                self.tail.row += 0;
+                self.tail.col += 0;
+            }
         }
         self.visited.push(self.tail);
     }
-    // Relative position of Head based on Tail
+    // Relative position of Head to Tail
     pub fn relative_direction(&self) -> Direction {
         let col_diff = self.head.col - self.tail.col;
         let row_diff = self.head.row - self.tail.row;
-        match (row_diff > 0, col_diff > 0) {
-            (true, true) => Direction::UpRight,
-            (true, false) => Direction::UpLeft,
-            (false, true) => Direction::DownRight,
-            (false, false) => Direction::DownLeft,
+        match (row_diff, col_diff) {
+            (2, 0) => Direction::Up,
+            (-2, 0) => Direction::Down,
+            (0, 2) => Direction::Right,
+            (0, -2) => Direction::Left,
+            (2, 1) | (1, 2) => Direction::UpRight,
+            (2, -1) | (1, -2) => Direction::UpLeft,
+            (-2, 1) | (-1, 2) => Direction::DownRight,
+            (-2, -1) | (-1, -2) => Direction::DownLeft,
+            _ => unimplemented!(),
         }
     }
+    pub fn get_direction(&mut self) -> Direction {
+        if self.is_overlapping() || self.is_touching() {
+            return Direction::StandStill;
+        }
+        self.relative_direction()
+    }
     // Move one unit{ row: 0, col: 0 }
-    pub fn move_rope(&mut self, direction: &Direction) {
-        dbg!(self.head, self.tail);
+    // pub fn move_rope(&mut self, direction: &Direction) {
+    //     // dbg!(self.head, self.tail);
+    //     self.move_head(direction);
 
+    //     // Move both head and tail based on current state
+    //     if self.is_overlapping() || self.is_touching() {
+    //         return;
+    //     }
+    //     self.move_tail(&self.relative_direction());
+    // }
+    // pub fn move_direction(&mut self, direction: &Direction, distance: usize) {
+    //     for _ in 0..distance {
+    //         self.move_rope(direction);
+    //     }
+    // }
+}
+impl LongerRope {
+    pub fn move_head(&mut self, direction: &Direction) {
+        let mut next_direction = *direction;
+        for segment in &mut self.segments {
+            segment.move_head(&next_direction);
+            next_direction = segment.get_direction();
+            segment.move_tail(&next_direction);
+        }
+        // dbg!(self.segments.last().unwrap().tail);
+        self.visited.push(self.segments.last().unwrap().tail);
         // Move both head and tail based on current state
-        if self.is_overlapping() {
-            self.move_head(direction);
-            return;
-        }
-        if self.is_touching_adjacent() {
-            self.move_head(direction);
-            if self.is_overlapping() || self.is_touching_diagonal() {
-                return;
-            }
-            // Move tail according to plank length
-            self.move_tail(direction);
-            return;
-        }
-        if self.is_touching_diagonal() {
-            self.move_head(direction);
-            if !self.is_touching() {
-                dbg!(self.relative_direction());
-                self.move_tail(&self.relative_direction());
-            }
-        }
     }
     pub fn move_direction(&mut self, direction: &Direction, distance: usize) {
         for _ in 0..distance {
-            self.move_rope(direction);
+            for i in 0..9 {
+                dbg!(self.segments.get(i).unwrap().head);
+                dbg!(self.segments.get(i).unwrap().tail);
+            }
+            self.move_head(direction);
         }
     }
+    pub fn get_unique_visited_count(&self) -> usize {
+        let unique_positions = self.visited.iter().unique().collect::<HashSet<_>>();
+        unique_positions.len()
+    }
 }
-
 fn main() {
     let lines = include_str!("input.txt").lines();
-    let mut rope = Rope::new();
+    let mut longer_rope = LongerRope::new();
     for line in lines {
         let parsed_args = line.split_whitespace().collect::<Vec<_>>();
         let direction = match parsed_args[0] {
@@ -151,23 +217,31 @@ fn main() {
             _ => unimplemented!(),
         };
         let distance = parsed_args[1].parse::<usize>().unwrap();
-        rope.move_direction(direction, distance)
+        longer_rope.move_direction(direction, distance);
     }
-
     // print unique count of visited positions
-    let unique_positions = rope.visited.iter().unique().collect::<HashSet<_>>();
-    println!("Unique positions: {:?}", rope.visited);
-    println!("count: {}", unique_positions.len());
+
+    // println!("count: {}", longer_rope.get_unique_visited_count());
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    pub fn test_touching_diagonal() {
-        let mut rope = Rope::new();
-        rope.head = Position::new(1, 4);
-        rope.tail = Position::new(0, 3);
-        assert!(rope.is_touching_diagonal());
-        assert!(!rope.is_touching_adjacent());
+    pub fn test_new_longer_rope() {
+        let mut longer_rope = LongerRope::new();
+        let lines = include_str!("input.txt").lines();
+        for line in lines {
+            let parsed_args = line.split_whitespace().collect::<Vec<_>>();
+            let direction = match parsed_args[0] {
+                "R" => &Direction::Right,
+                "L" => &Direction::Left,
+                "U" => &Direction::Up,
+                "D" => &Direction::Down,
+                _ => unimplemented!(),
+            };
+            let distance = parsed_args[1].parse::<usize>().unwrap();
+            longer_rope.move_direction(direction, distance)
+        }
+        assert_eq!(longer_rope.get_unique_visited_count(), 36);
     }
 }
